@@ -27,8 +27,8 @@ def main(
     skip_begin_layers,
     skip_end_layers,
     discriminant_ratio_tolerance,
-    batch_size,
-    quantization_bits  
+    triplets_per_batch,
+    quantization_bits
 ):
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -49,7 +49,7 @@ def main(
         model_id,
         output_path,
         use_separate_system_message,
-        batch_size,
+        triplets_per_batch,
         quantization_bits
     )
 
@@ -71,12 +71,12 @@ def main(
                 device = "cpu",
                 quantization_bits=quantization_bits
             )
-            
+
             if i == 0:
                 name = "debias"
             else:
                 name = dataset_manager.class_names[i]
-            
+
             # Save as control vectors in '.gguf' format.
             model_handler.export_gguf(direction_matrices_by_class, output_path + f"_{name}.gguf")
 
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip_begin_layers", type = int, default = 0, help = "The number (or fraction) of initial layers to skip.")
     parser.add_argument("--skip_end_layers", type = int, default = 1, help = "The number (or fraction) of end layers to skip.")
     parser.add_argument("--discriminant_ratio_tolerance", type = float, default = 0.5, help = "Used to filter low signal \"noise\" directions (0 = none).")
-    parser.add_argument("--batch_size", type=int, default=1, help="Number of samples to process in each batch")
+    parser.add_argument("--triplets_per_batch", type=int, default=1, help="Number of samples to process in each batch")
     parser.add_argument(
         "--quantization_bits",
         type=int,
@@ -101,7 +101,7 @@ if __name__ == "__main__":
         help="Number of bits for quantization (4 or 8). Default is 4-bit as in original implementation."
     )
     args = parser.parse_args()
-    
+
     main(
         args.model_id,
         args.output_path,
@@ -113,6 +113,6 @@ if __name__ == "__main__":
         args.skip_begin_layers,
         args.skip_end_layers,
         args.discriminant_ratio_tolerance,
-        args.batch_size,
+        args.triplets_per_batch,
         args.quantization_bits
     )

@@ -17,14 +17,14 @@ class ModelHandler:
             raise FileNotFoundError(f"Configuration file not found at {config_path}")
         with open(config_path, 'r') as f:
             config = json.load(f)
-            
+
         # Determine if the model is Gemma2ForCausalLM
         # NOTE: The Gemma2 models need attn_implementation="eager" and doesn't like float16 due to the +/- 2^16 range.
         #       https://old.reddit.com/r/LocalLLaMA/comments/1dsvpp2/thread_on_running_gemma_2_correctly_with_hf/
         isGemma2 = (config.get("architectures", [])[0] == "Gemma2ForCausalLM")
         if isGemma2:
             print("*** Gemma2ForCausalLM: Using torch_dtype = bfloat16 and attn_implementation = 'eager' ***")
-                
+
         # Use float16 and 4-bit for 'cuda'.
         if device == "cuda":
             # Adjust dtype for Gemma2.
@@ -109,9 +109,9 @@ class ModelHandler:
         hidden_dimension = next((tensor.shape[1] for tensor in directions if tensor is not None), None)
         if hidden_dimension is None:
             raise ValueError("All tensors are None or no tensor has a second dimension.")
-        
+
         print(f"Hidden dimension size across tensors: {hidden_dimension}")
-        
+
         ### @@@ NOTE: Padded with zero tensors to work around llama.cpp code @@@ ###
         for layer, tensor in enumerate(directions):
             """
@@ -136,8 +136,8 @@ class ModelHandler:
                     print(f"--- Combined vectors for layer {layer + 1} into shape: {combined_tensor.shape}")
                 else:
                     combined_tensor = tensor[0]
-                writer.add_tensor(f"direction.{layer + 1}", combined_tensor.flatten().numpy())            
-                
+                writer.add_tensor(f"direction.{layer + 1}", combined_tensor.flatten().numpy())
+
         writer.write_header_to_file()
         writer.write_kv_data_to_file()
         writer.write_tensors_to_file()
@@ -145,6 +145,73 @@ class ModelHandler:
         writer.close()
 
         print("Export completed")
+
+    def export_gguf_conceptors(self, conceptors, means, path):
+        """
+        Exports conceptors and means in GGUF format.
+
+        Parameters:
+            conceptors: List of conceptor matrices [class_idx][layer_idx] -> torch.Tensor(d, d) or None
+            means: List of mean vectors [class_idx][layer_idx] -> torch.Tensor(d) or None
+            path: Output file path
+        """
+        import gguf
+        ARCHITECTURE = "conceptor"
+        writer = gguf.GGUFWriter(path, ARCHITECTURE)
+
+        print(f"Initializing GGUFWriter with path: '{path}' and architecture: '{ARCHITECTURE}'")
+
+        writer.add_string(f"{ARCHITECTURE}.model_hint", self.get_model_type())
+        writer.add_string(f"{ARCHITECTURE}.model_id", os.path.basename(path))
+
+        num_layers = self.get_num_layers()
+        num_classes = len(conceptors)
+        writer.add_uint32(f"{ARCHITECTURE}.layer_count", num_layers)
+        writer.add_uint32(f"{ARCHITECTURE}.class_count", num_classes)
+
+        hidden_dim = None
+        for class_conceptors in conceptors:
+            for con in class_conceptors:
+                if con is not None:
+                    if isinstance(con, tuple):  # Low-rank approximation (U_k, s_k)
+                        U_k, _ = con
+                        hidden_dim = U_k.shape[0]
+                    else:
+                        hidden_dim = con.shape[0]
+                    break
+            if hidden_dim is not None:
+                break
+        if hidden_dim is None:
+            raise ValueError("No conceptor found to determine the hidden dimension size")
+        writer.add_uint32(f"{ARCHITECTURE}.hidden_dim", hidden_dim)
+        print(f"Hidden dimension size: {hidden_dim}")
+
+        for class_idx, (class_conceptors, class_means) in enumerate(zip(conceptors, means)):
+            print(f"Processing class index: {class_idx}")
+            for layer_idx, (con, m) in enumerate(zip(class_conceptors, class_means)):
+                if con is not None:
+                    if isinstance(con, tuple):  # Low-rank approximation (U_k, s_k)
+                        U_k, s_k = con
+                        Uk_name = f"Uk.{class_idx}.{layer_idx}"
+                        sk_name = f"sk.{class_idx}.{layer_idx}"
+                        writer.add_tensor(Uk_name, U_k.cpu().numpy())
+                        writer.add_tensor(sk_name, s_k.cpu().numpy())
+                        print(
+                            f"  - Added low-rank conceptor tensors: {Uk_name} with shape {U_k.shape}, {sk_name} with shape {s_k.shape}")
+                    else:  # Full conceptor matrix
+                        conceptor_name = f"conceptor.{class_idx}.{layer_idx}"
+                        writer.add_tensor(conceptor_name, con.cpu().numpy())
+                        print(f"  - Added full conceptor tensor: {conceptor_name} with shape {con.shape}")
+                if m is not None:
+                    mean_name = f"mean_vector.{class_idx}.{layer_idx}"
+                    writer.add_tensor(mean_name, m.cpu().numpy())
+                    print(f"  - Added mean vector tensor: {mean_name} with shape {m.shape}")
+
+        writer.write_header_to_file()
+        writer.write_kv_data_to_file()
+        writer.write_tensors_to_file()
+        writer.close()
+        print(f"Exported conceptors and means to {path} in GGUF format.")
 
     def delete(self):
         del self.model

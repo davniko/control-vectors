@@ -35,14 +35,14 @@ class HiddenStateDataManager:
             sys.stdout.flush()
             self.save_hidden_state_samples(filename)
             print("Done.")
-    
+
     def get_datasets(self, layer_index: int) -> List[torch.Tensor]:
         return [torch.stack([sample[layer_index] for sample in dataset]) for dataset in self.dataset_hidden_states]
-    
+
     def get_differenced_datasets(self, layer_index: int) -> List[torch.Tensor]:
         datasets = self.get_datasets(layer_index)
         return [dataset - datasets[0] for dataset in datasets[1:]]
-    
+
     def get_num_layers(self) -> int:
         return len(self.dataset_hidden_states[0][0])
 
@@ -60,7 +60,7 @@ class HiddenStateDataManager:
             self.dataset_hidden_states = torch.load(file_path)
         except Exception as e:
             print(f"Error loading hidden state samples from {file_path}: {e}")
-            
+
     def save_hidden_state_samples(self, file_path: str) -> None:
         try:
             torch.save(self.dataset_hidden_states, file_path)
@@ -115,15 +115,19 @@ class HiddenStateDataManager:
             print(f"Error generating hidden states: {e}")
 
     def _generate(self, tokens: torch.Tensor) -> List[torch.Tensor]:
+        tokens = tokens.to(self.model_handler.model.device)
         output = self.model_handler.model.generate(
-            tokens.to(self.model_handler.model.device),
-            use_cache = False,
-            max_new_tokens = 1,
-            return_dict_in_generate = True,
-            output_hidden_states = True,
-            attention_mask = torch.ones(tokens.size(), dtype=torch.long).to(tokens.device),
-            pad_token_id = self.model_handler.tokenizer.pad_token_id if self.model_handler.tokenizer.pad_token_id is not None else self.model_handler.tokenizer.eos_token_id
+            tokens,
+            use_cache=False,
+            max_new_tokens=1,
+            return_dict_in_generate=True,
+            output_hidden_states=True,
+            attention_mask=torch.ones(tokens.size(), dtype=torch.long).to(tokens.device),
+            pad_token_id=self.model_handler.tokenizer.pad_token_id if self.model_handler.tokenizer.pad_token_id is not None else self.model_handler.tokenizer.eos_token_id
         )
-        hidden_states_by_layer = [hidden_state[:, -1,:].squeeze().to('cpu') for hidden_state in output.hidden_states[-1][:]]
-        deltas = [hidden_states_by_layer[i] - hidden_states_by_layer[i - 1] for i in range(1, len(hidden_states_by_layer))]
+        hidden_states_by_layer = [hidden_state[:, -1, :].squeeze().to('cpu') for hidden_state in
+                                  output.hidden_states[-1][:]]
+        deltas = [hidden_states_by_layer[i] - hidden_states_by_layer[i - 1] for i in
+                  range(1, len(hidden_states_by_layer))]
         return deltas
+

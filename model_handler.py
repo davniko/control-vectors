@@ -146,13 +146,14 @@ class ModelHandler:
 
         print("Export completed")
 
-    def export_gguf_conceptors(self, conceptors, means, path):
+    def export_gguf_conceptors(self, conceptors, means, class_idx, path):
         """
-        Exports conceptors and means in GGUF format.
+        Exports conceptors and means for a single class in GGUF format.
 
         Parameters:
-            conceptors: List of conceptor matrices [class_idx][layer_idx] -> torch.Tensor(d, d) or None
-            means: List of mean vectors [class_idx][layer_idx] -> torch.Tensor(d) or None
+            conceptors: List of conceptor matrices for the class [layer_idx] -> torch.Tensor(d, d) or None
+            means: List of mean vectors for the class [layer_idx] -> torch.Tensor(d) or None
+            class_idx: The index of the class being exported
             path: Output file path
         """
         import gguf
@@ -165,53 +166,47 @@ class ModelHandler:
         writer.add_string(f"{ARCHITECTURE}.model_id", os.path.basename(path))
 
         num_layers = self.get_num_layers()
-        num_classes = len(conceptors)
         writer.add_uint32(f"{ARCHITECTURE}.layer_count", num_layers)
-        writer.add_uint32(f"{ARCHITECTURE}.class_count", num_classes)
 
         hidden_dim = None
-        for class_conceptors in conceptors:
-            for con in class_conceptors:
-                if con is not None:
-                    if isinstance(con, tuple):  # Low-rank approximation (U_k, s_k)
-                        U_k, _ = con
-                        hidden_dim = U_k.shape[0]
-                    else:
-                        hidden_dim = con.shape[0]
-                    break
-            if hidden_dim is not None:
+        for con in conceptors:
+            if con is not None:
+                if isinstance(con, tuple):  # Low-rank approximation (U_k, s_k)
+                    U_k, _ = con
+                    hidden_dim = U_k.shape[0]
+                else:
+                    hidden_dim = con.shape[0]
                 break
         if hidden_dim is None:
             raise ValueError("No conceptor found to determine the hidden dimension size")
         writer.add_uint32(f"{ARCHITECTURE}.hidden_dim", hidden_dim)
         print(f"Hidden dimension size: {hidden_dim}")
 
-        for class_idx, (class_conceptors, class_means) in enumerate(zip(conceptors, means)):
-            print(f"Processing class index: {class_idx}")
-            for layer_idx, (con, m) in enumerate(zip(class_conceptors, class_means)):
-                if con is not None:
-                    if isinstance(con, tuple):  # Low-rank approximation (U_k, s_k)
-                        U_k, s_k = con
-                        Uk_name = f"Uk.{class_idx}.{layer_idx}"
-                        sk_name = f"sk.{class_idx}.{layer_idx}"
-                        writer.add_tensor(Uk_name, U_k.cpu().numpy())
-                        writer.add_tensor(sk_name, s_k.cpu().numpy())
-                        print(
-                            f"  - Added low-rank conceptor tensors: {Uk_name} with shape {U_k.shape}, {sk_name} with shape {s_k.shape}")
-                    else:  # Full conceptor matrix
-                        conceptor_name = f"conceptor.{class_idx}.{layer_idx}"
-                        writer.add_tensor(conceptor_name, con.cpu().numpy())
-                        print(f"  - Added full conceptor tensor: {conceptor_name} with shape {con.shape}")
-                if m is not None:
-                    mean_name = f"mean_vector.{class_idx}.{layer_idx}"
-                    writer.add_tensor(mean_name, m.cpu().numpy())
-                    print(f"  - Added mean vector tensor: {mean_name} with shape {m.shape}")
+        print(f"Processing class index: {class_idx}")
+        for layer_idx, (con, m) in enumerate(zip(conceptors, means)):
+            if con is not None:
+                if isinstance(con, tuple):  # Low-rank approximation (U_k, s_k)
+                    U_k, s_k = con
+                    Uk_name = f"Uk.{layer_idx}"
+                    sk_name = f"sk.{layer_idx}"
+                    writer.add_tensor(Uk_name, U_k.cpu().numpy())
+                    writer.add_tensor(sk_name, s_k.cpu().numpy())
+                    print(
+                        f"  - Added low-rank conceptor tensors: {Uk_name} with shape {U_k.shape}, {sk_name} with shape {s_k.shape}")
+                else:  # Full conceptor matrix
+                    conceptor_name = f"conceptor.{layer_idx}"
+                    writer.add_tensor(conceptor_name, con.cpu().numpy())
+                    print(f"  - Added full conceptor tensor: {conceptor_name} with shape {con.shape}")
+            if m is not None:
+                mean_name = f"mean_vector.{layer_idx}"
+                writer.add_tensor(mean_name, m.cpu().numpy())
+                print(f"  - Added mean vector tensor: {mean_name} with shape {m.shape}")
 
         writer.write_header_to_file()
         writer.write_kv_data_to_file()
         writer.write_tensors_to_file()
         writer.close()
-        print(f"Exported conceptors and means to {path} in GGUF format.")
+        print(f"Exported conceptors and means for class {class_idx} to {path} in GGUF format.")
 
     def delete(self):
         del self.model

@@ -71,11 +71,16 @@ def main(
             variance_threshold=variance_threshold,
             threshold=threshold
         )
-        conceptor_filename = output_path + "_conceptors.gguf"
-        print(f"Saving computed conceptors and means to '{conceptor_filename}'...")
 
         model_handler = ModelHandler(model_id, device="cpu")
-        model_handler.export_gguf_conceptors(c_analyzer.conceptors, c_analyzer.means, conceptor_filename)
+        num_classes = c_analyzer.num_dataset_types
+
+        for class_idx in range(num_classes):
+            conceptor_filename = output_path + f"_conceptor_class_{class_idx}.gguf"
+            print(f"Saving computed conceptors and means for class {class_idx} to '{conceptor_filename}'...")
+            class_conceptors = c_analyzer.conceptors[class_idx]
+            class_means = c_analyzer.means[class_idx]
+            model_handler.export_gguf_conceptors(class_conceptors, class_means, class_idx, conceptor_filename)
         model_handler.delete()
 
     else:

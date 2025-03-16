@@ -193,9 +193,13 @@ class HiddenStateDataManager:
             pad_token_id = pad_token_id
         )
         
+        all_hidden_states = []
+        for hidden_state in output.hidden_states[-1][:]:
+            all_hidden_states.append(hidden_state.to('cpu'))
+        
         batch_deltas = []                
         for i in range(len(tokens_batch)):
-            hidden_states_by_layer = [hidden_state[i, -1, :].squeeze().to('cpu') for hidden_state in output.hidden_states[-1][:]]
+            hidden_states_by_layer = [hidden_state[i, -1, :].squeeze() for hidden_state in all_hidden_states]
             deltas = [hidden_states_by_layer[j] - hidden_states_by_layer[j - 1] for j in range(1, len(hidden_states_by_layer))]
             batch_deltas.append(deltas)
         

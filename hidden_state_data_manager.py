@@ -168,14 +168,15 @@ class HiddenStateDataManager:
         padded_tokens = []
         attention_masks = []
         pad_token_id = self.model_handler.tokenizer.pad_token_id if self.model_handler.tokenizer.pad_token_id is not None else self.model_handler.tokenizer.eos_token_id
+        device = self.model_handler.model.device
         
         for tokens in tokens_batch:
             seq_len = tokens.size(1)
             padding_length = max_length - seq_len
-            padded = torch.full((1, max_length), pad_token_id, dtype=tokens.dtype, device=tokens.device)
-            padded[:, padding_length:] = tokens
-            padded_tokens.append(padded)                    
-            mask = torch.zeros_like(padded)
+            padded = torch.full((1, max_length), pad_token_id, dtype=tokens.dtype, device=device)
+            padded[:, padding_length:] = tokens.to(device)
+            padded_tokens.append(padded)
+            mask = torch.zeros((1, max_length), dtype=torch.long, device=device)
             mask[:, padding_length:] = 1
             attention_masks.append(mask)
         
@@ -183,12 +184,12 @@ class HiddenStateDataManager:
         batch_attention_mask = torch.cat(attention_masks, dim=0)
         
         output = self.model_handler.model.generate(
-            batch_tokens.to(self.model_handler.model.device),
+            batch_tokens,
             use_cache = False,
             max_new_tokens = 1,
             return_dict_in_generate = True,
             output_hidden_states = True,
-            attention_mask = batch_attention_mask.to(self.model_handler.model.device),
+            attention_mask = batch_attention_mask,
             pad_token_id = pad_token_id
         )
         

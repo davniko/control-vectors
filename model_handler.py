@@ -3,12 +3,18 @@ import sys
 import json
 import torch
 
-from typing import Union
+from typing import Union, Literal
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 class ModelHandler:
 
-    def __init__(self, pretrained_model_name_or_path: Union[str, os.PathLike], device = "cpu", use_bfloat16=True):
+    def __init__(
+            self, 
+            pretrained_model_name_or_path: Union[str, os.PathLike], 
+            device = "cpu", 
+            use_bfloat16=True,
+            quantization: Literal["4bit", "8bit", "none"] = "4bit"
+            ):
         self.device = device
 
         # Load the config file.
@@ -23,13 +29,30 @@ class ModelHandler:
         #       https://old.reddit.com/r/LocalLLaMA/comments/1dsvpp2/thread_on_running_gemma_2_correctly_with_hf/
         isGemma2 = (config.get("architectures", [])[0] == "Gemma2ForCausalLM")
         if isGemma2:
-            print("*** Gemma2ForCausalLM: Using torch_dtype = bfloat16 and attn_implementation = 'eager' ***")
+            print("*** Gemma2ForCausalLM: Forcing torch_dtype = bfloat16 and attn_implementation = 'eager' ***")
+            use_bfloat16 = True  # Force bfloat16 for Gemma2 regardless of user preference
                 
         # Use float16 and 4-bit for 'cuda'.
         if device == "cuda":
-            # Adjust dtype for Gemma2.
-            self.torch_dtype = torch.bfloat16 if isGemma2 else torch.float16
-            self.quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=self.torch_dtype)
+            # dtype based on passed param
+            self.torch_dtype = torch.bfloat16 if use_bfloat16 else torch.float16
+            print(f"Using torch_dtype = {'bfloat16' if use_bfloat16 else 'float16'} for all models on {device}")
+
+            # Configure quant
+            if quantization == "4bit":
+                print("Using 4-bit quantization")
+                self.quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=self.torch_dtype
+                )
+            elif quantization == "8bit":
+                print("Using 8-bit quantization")
+                self.quantization_config = BitsAndBytesConfig(
+                    load_in_8bit=True
+                )
+            else:  # half-precision
+                print("Using no quantization")
+                self.quantization_config = None
 
         # Use the model's actual float type for 'cpu'.
         elif device == "cpu":

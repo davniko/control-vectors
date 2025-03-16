@@ -28,7 +28,8 @@ def main(
     skip_end_layers,
     discriminant_ratio_tolerance,
     batch_size,
-    use_bfloat16
+    use_bfloat16,
+    quantization
 ):
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -49,7 +50,9 @@ def main(
         model_id,
         output_path,
         use_separate_system_message,
-        batch_size
+        batch_size,
+        use_bfloat16,
+        quantization
     )
 
     direction_analyzer = DirectionAnalyzer(
@@ -69,6 +72,7 @@ def main(
                 model_id,
                 device = "cpu",
                 use_bfloat16 = use_bfloat16,
+                quantization = "none"  # No quantization for export
             )
             
             if i == 0:
@@ -93,6 +97,7 @@ if __name__ == "__main__":
     parser.add_argument("--discriminant_ratio_tolerance", type = float, default = 0.5, help = "Used to filter low signal \"noise\" directions (0 = none).")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for hidden state generation (1 = no batching).")
     parser.add_argument("--use_bfloat16", action="store_true", default=True, help="Use bfloat16 instead of float16 (default: True).")
+    parser.add_argument("--quantization", type=str, choices=["4bit", "8bit", "none"], default="4bit", help="Quantization level for model loading (default: 4bit)")
 
     args = parser.parse_args()
     main(
@@ -107,5 +112,6 @@ if __name__ == "__main__":
         args.skip_end_layers,
         args.discriminant_ratio_tolerance,
         args.batch_size,
-        args.use_bfloat16
+        args.use_bfloat16,
+        args.quantization
     )

@@ -6,9 +6,9 @@
 # ./create_all_control_vectors.sh "0,1" "./c4ai-command-r-plus" "command-r-plus:104b-" 12288
 
 # Check if we have the correct number of arguments
-if [ "$#" -ne 4 ]; then
-    echo "Usage: $0 <cuda_devices> <model_id> <output_prefix> <num_prompt_samples>"
-    echo "Example: $0 \"0,1\" \"/path/to/model\" \"model-prefix-\" 12345"
+if [ "$#" -lt 4 ]; then
+    echo "Usage: $0 <cuda_devices> <model_id> <output_prefix> <num_prompt_samples> [batch_size=1] [use_bfloat16=true]"
+    echo "Example: $0 \"0,1\" \"/path/to/model\" \"model-prefix-\" 12345 8 true"
     exit 1
 fi
 
@@ -22,6 +22,14 @@ CUDA_DEVICES="$1"
 MODEL_ID="$2"
 OUTPUT_PREFIX="$3"
 NUM_PROMPT_SAMPLES="$4"
+BATCH_SIZE="${5:-1}"
+USE_BFLOAT16="${6:-true}"
+
+if [ "$USE_BFLOAT16" = "true" ]; then
+    BFLOAT16_FLAG="--use_bfloat16"
+else
+    BFLOAT16_FLAG=""
+fi
 
 # Define arrays for continuations and output suffixes
 continuations=(
@@ -57,5 +65,7 @@ for i in "${!continuations[@]}"; do
         --prompt_stems_file "$STEMS" \
         --writing_prompts_file "$PROMPTS" \
         --continuations_file "${continuations[i]}" \
-        --num_prompt_samples "$NUM_PROMPT_SAMPLES"
+        --num_prompt_samples "$NUM_PROMPT_SAMPLES" \
+        --batch_size "$BATCH_SIZE" \
+        $BFLOAT16_FLAG
 done

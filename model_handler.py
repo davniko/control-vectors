@@ -8,7 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 class ModelHandler:
 
-    def __init__(self, pretrained_model_name_or_path: Union[str, os.PathLike], device = "cpu"):
+    def __init__(self, pretrained_model_name_or_path: Union[str, os.PathLike], device = "cpu", use_bfloat16=True):
         self.device = device
 
         # Load the config file.

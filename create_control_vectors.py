@@ -26,7 +26,9 @@ def main(
     use_separate_system_message,
     skip_begin_layers,
     skip_end_layers,
-    discriminant_ratio_tolerance
+    discriminant_ratio_tolerance,
+    batch_size,
+    use_bfloat16
 ):
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -46,7 +48,8 @@ def main(
         dataset_manager,
         model_id,
         output_path,
-        use_separate_system_message
+        use_separate_system_message,
+        batch_size
     )
 
     direction_analyzer = DirectionAnalyzer(
@@ -64,7 +67,8 @@ def main(
             free_memory()
             model_handler = ModelHandler(
                 model_id,
-                device = "cpu"
+                device = "cpu",
+                use_bfloat16 = use_bfloat16,
             )
             
             if i == 0:
@@ -87,6 +91,9 @@ if __name__ == "__main__":
     parser.add_argument("--skip_begin_layers", type = int, default = 0, help = "The number (or fraction) of initial layers to skip.")
     parser.add_argument("--skip_end_layers", type = int, default = 1, help = "The number (or fraction) of end layers to skip.")
     parser.add_argument("--discriminant_ratio_tolerance", type = float, default = 0.5, help = "Used to filter low signal \"noise\" directions (0 = none).")
+    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for hidden state generation (1 = no batching).")
+    parser.add_argument("--use_bfloat16", action="store_true", default=True, help="Use bfloat16 instead of float16 (default: True).")
+
     args = parser.parse_args()
     main(
         args.model_id,
@@ -98,5 +105,7 @@ if __name__ == "__main__":
         args.use_separate_system_message,
         args.skip_begin_layers,
         args.skip_end_layers,
-        args.discriminant_ratio_tolerance
+        args.discriminant_ratio_tolerance,
+        args.batch_size,
+        args.use_bfloat16
     )
